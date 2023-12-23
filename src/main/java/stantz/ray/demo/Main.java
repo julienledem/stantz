@@ -7,7 +7,7 @@ public class Main {
   public static void main(String[] args) {
     System.out.println("start");
 
-    new Display(new SceneControler()).init(300,300);
+    new Display(new SceneControler()).init(800, 800);
 
     System.out.println("end");
   }

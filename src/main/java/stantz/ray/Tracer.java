@@ -9,6 +9,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import stantz.ray.math.Box2D;
+import stantz.ray.math.Line;
 import stantz.ray.math.Vector2D;
 import stantz.ray.math.Vector3D;
 
@@ -16,17 +17,13 @@ import stantz.ray.math.Vector3D;
 
 public class Tracer {
 
-  public static class CachedVisible implements Visible {
-    Visible object;
-    Box2D boundingBox;
+  public static final class ObjectBoundingBox {
+	final Visible object;
+	final Box2D boundingBox;
 
-    private CachedVisible(Visible object, Box2D boundingBox) {
+    private ObjectBoundingBox(Visible object, Box2D boundingBox) {
       this.object = object;
       this.boundingBox = boundingBox;
-    }
-
-    public Box2D getBoundingBox(Screen screen) {
-      return object.getBoundingBox(screen);
     }
 
     public Incidence intersection(Ray ray) {
@@ -46,7 +43,7 @@ public class Tracer {
   }
 
   Scene scene;
-  public List<CachedVisible> cacheObjects;
+  public List<ObjectBoundingBox> cacheObjects;
   public Visible objectAtMouse = null;
 
   public Tracer(Scene scene) {
@@ -63,21 +60,20 @@ public class Tracer {
 
     Ray ray = scene.screen.generateRay(mouse);
     Incidence nearestObject = nearestObject(ray, mouse);
-    if (nearestObject!=null) {
+    if (nearestObject != null) {
       objectAtMouse = nearestObject.object;
     }
 
     //		long t2 = System.currentTimeMillis();
-    Future<Color[]>[] futures = new Future[scene.screen.widthInPixels];
+    List<Future<Color[]>> futures = new ArrayList<>(scene.screen.widthInPixels);
     for (int i = 0; i < scene.screen.widthInPixels; i++) {
       final int ii = i;
-      futures[i] = executorService.submit(new Callable<Color[]>() {
+      futures.add(executorService.submit(new Callable<Color[]>() {
 
         public Color[] call() throws Exception {
           Color[] line = new Color[scene.screen.heightInPixels];
-          Vector2D pixel = new Vector2D(0,0);
           for (int j = 0; j < scene.screen.heightInPixels; j++) {
-            pixel.bangupdate(ii,j);
+        	Vector2D pixel = new Vector2D(ii,j);
             Ray ray = scene.screen.generateRay(pixel);
             Color c = trace(ray, pixel);
             line[j]=c;
@@ -85,12 +81,13 @@ public class Tracer {
           return line;
         }
 
-      });
+      }));
     }
+    
     //		long t3 = System.currentTimeMillis();
     for (int i = 0; i < scene.screen.widthInPixels; i++) {
       try {
-        result[i] = futures[i].get();
+        result[i] = futures.get(i).get();
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       } catch (ExecutionException e) {
@@ -104,34 +101,42 @@ public class Tracer {
   }
 
   public Color trace(Ray ray, Vector2D screenPoint) {
-    if (ray.ttl==0) {
+    if (ray.ttl == 0) {
       return scene.background;
     }
     Incidence nearestObject = nearestObject(ray, screenPoint);
     if (nearestObject == null) {
       return scene.background;
     } else {
-      Vector3D reflectionDirection = nearestObject.normal.multiply(2*nearestObject.normal.scalar(ray.minusFromDirection)).bangminus(ray.minusFromDirection).bangmultiply(-1).bangnormalize();
-      Vector3D intersection = ray.minusFromDirection.multiply(nearestObject.distance).bangplus(ray.toPoint);
-      Ray reflected = ray.commingFrom(intersection, reflectionDirection);
+      Vector3D reflectionDirection =
+    	ray.line.direction.minus(
+    		nearestObject.normal.multiply(2 * nearestObject.normal.scalar(ray.line.direction))
+    	).normalize();
+      Vector3D intersection = ray.line.pointOnLine(nearestObject.distance);
+      Ray reflected = ray.commingFrom(new Line(intersection, reflectionDirection));
       Color reflectedColor = trace(reflected, null);
 
-      //			Vector refractedDirection = l.minus(normal).bangmultiply(-0.1).bangplus(l).bangnormalize();
+      //			Vector refractedDirection = l.minus(normal).multiply(-0.1).plus(l).normalize();
       //			Ray refracted = ray.commingFrom(intersection, refractedDirection);
       //			Color refractedColor = trace(refracted).dim(0.6f);
 
       Color diffusedColor = new Color(Color.black);
       for (LightSource lightSource : scene.lightSources) {
-        Vector3D lightSourceDirection = lightSource.position.minus(intersection).bangmultiply(-1).bangnormalize();
-        if (nearestObject(ray.commingFrom(intersection, lightSourceDirection), null)==null) {
-          float coef = (float)positive(lightSourceDirection.scalar(reflectionDirection));
-          diffusedColor = diffusedColor.bangaddDimmed(lightSource.color,coef);
+    	Line lightSourceDirection = Line.fromTwoPointsOriginOnSecond(lightSource.position, intersection);
+        if (nearestObject(ray.commingFrom(lightSourceDirection), null) == null) {
+          float coef = (float)positive(lightSourceDirection.direction.scalar(reflectionDirection));
+          diffusedColor = diffusedColor.addDimmed(lightSource.color, coef / scene.lightSources.size());
         }
       }
 
-      Color result = diffusedColor.bangadd(reflectedColor).bangadd(scene.ambientColor)./*bangadd(refractedColor).*/bangfilter(nearestObject.color);
+      Color result = diffusedColor.dim(0.4f)
+    		  .addDimmed(reflectedColor, 0.4f)
+    		  .addDimmed(scene.ambientColor, 0.2f)
+    		  //.add(refractedColor)
+    		  .filter(nearestObject.color);
+      
       if (nearestObject.object == objectAtMouse) {
-        result.bangInvert();
+        result = result.dim(0.5f);
       }
       return result;
     }
@@ -140,16 +145,16 @@ public class Tracer {
 
   private double positive(double scalar) {
 
-    return scalar<0?0:scalar;
+    return scalar < 0 ? 0 : scalar;
   }
 
   public Incidence nearestObject(Ray ray, Vector2D screenPoint) {
     Incidence nearestObject = null;
-    for (CachedVisible object : cacheObjects) {
+    for (ObjectBoundingBox object : cacheObjects) {
       Box2D boundingBox = object.getBoundingBox();
       if (screenPoint==null || boundingBox.contains(screenPoint)) {
         Incidence d = object.intersection(ray);
-        if (d!=null && (nearestObject == null || d.distance<nearestObject.distance)) {
+        if ( d != null && ( nearestObject == null || d.distance < nearestObject.distance ) ) {
           nearestObject = d;
         }
       }
@@ -157,11 +162,11 @@ public class Tracer {
     return nearestObject;
   }
 
-  public List<CachedVisible> cache(List<Visible> nonCacheObjects) {
-    List<CachedVisible> cacheObjects = new ArrayList<CachedVisible>(nonCacheObjects.size());
+  public List<ObjectBoundingBox> cache(List<Visible> nonCacheObjects) {
+    List<ObjectBoundingBox> cacheObjects = new ArrayList<ObjectBoundingBox>(nonCacheObjects.size());
     for (Visible object : nonCacheObjects) {
       Box2D boundingBox = object.getBoundingBox(scene.screen);
-      cacheObjects.add(new CachedVisible(object, boundingBox));
+      cacheObjects.add(new ObjectBoundingBox(object, boundingBox));
     }
     return cacheObjects;
   }

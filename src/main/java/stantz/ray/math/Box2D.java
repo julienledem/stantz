@@ -1,9 +1,9 @@
 package stantz.ray.math;
 
-public class Box2D {
+public final class Box2D {
 
-  public Vector2D topLeft;
-  public Vector2D bottomRight;
+  public final Vector2D topLeft;
+  public final Vector2D bottomRight;
 
   public Box2D(Vector2D topLeft, Vector2D bottomRight) {
     super();

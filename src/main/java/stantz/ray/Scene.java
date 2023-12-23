@@ -2,13 +2,13 @@ package stantz.ray;
 
 import java.util.List;
 
-public class Scene {
+public final class Scene {
 
-  Screen screen;
-  List<LightSource> lightSources;
-  Color ambientColor;
-  Color background;
-  List<Visible> objects;
+  final Screen screen;
+  final List<LightSource> lightSources;
+  final Color ambientColor;
+  final Color background;
+  final List<Visible> objects;
 
   public Scene(Screen screen, List<LightSource> lightSources,
       Color ambientColor, Color background, List<Visible> objects) {

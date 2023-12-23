@@ -1,30 +1,27 @@
 package stantz.ray;
 
+import stantz.ray.math.Line;
 import stantz.ray.math.Referential;
 import stantz.ray.math.Vector2D;
 import stantz.ray.math.Vector3D;
 
-public class Screen {
+public final class Screen {
 
-  public Vector3D eye;
+  public final Vector3D eye;
 
-  public Vector3D center;
-  public Vector3D x;
-  public Vector3D y;
+  public final Vector3D center;
+  public final Vector3D x;
+  public final Vector3D y;
 
-  public int widthInPixels;
-  public int heightInPixels;
+  public final int widthInPixels;
+  public final int heightInPixels;
 
-  // plan
-  public Vector3D n;
-  public double d;
+  public final Referential referential;
 
-  public Referential referential;
-
-  public double width;
-  public double height;
-  public double pixelWidth;
-  public double pixelHeight;
+  public final double width;
+  public final double height;
+  public final double pixelWidth;
+  public final double pixelHeight;
 
   final Vector3D topLeftCorner;
 
@@ -33,44 +30,48 @@ public class Screen {
     super();
     this.eye = eye;
     this.center = screenCenter;
+    
     this.x = screenX;
     this.y = screenY;
+    Vector3D z = x.cross(y);
+    
     this.widthInPixels = widthInPixels;
     this.heightInPixels = heightInPixels;
+    
     // plan
-    n = x.cross(y);
-    d = -center.scalar(n);
 
     width = x.norm();
     height = y.norm();
 
-    pixelWidth = width/widthInPixels;
-    pixelHeight = height/heightInPixels;
+    pixelWidth = width / widthInPixels;
+    pixelHeight = height / heightInPixels;
 
-    referential = new Referential(x.normalize(), y.normalize(), n.normalize());
+    referential = new Referential(x.normalize(), y.normalize(), z.normalize());
 
-    topLeftCorner = center.plusMultiplied(x,-0.5).bangplusMultiplied(y,-0.5);
+    topLeftCorner = center.plus(x.multiply(-0.5)).plus(y.multiply(-0.5));
   }
 
   public Vector2D project(Vector3D point) {
-    // intersection with line
-    Vector3D eyeToPoint = point.minus(eye);
-    double t = (-d-eye.scalar(n))/(eyeToPoint.scalar(n));
-    Vector3D intersection = eyeToPoint.bangmultiply(t).bangplus(eye);
+	Line toPoint = Line.fromTwoPointsOriginOnFirst(eye, point);
+	Vector3D intersection = toPoint.intersectionWithPlan(center, referential.k);
 
-    Vector2D intersection2D = new Vector2D((referential.i.scalar(intersection)+width/2)/pixelWidth, (referential.j.scalar(intersection)+height/2)/pixelHeight);
+    Vector2D intersection2D = new Vector2D(
+    		( referential.i.scalar(intersection) + width / 2 ) / pixelWidth, 
+    		( referential.j.scalar(intersection) + height / 2 ) / pixelHeight
+    		);
 
     return intersection2D;
   }
 
   public Ray generateRay(Vector2D pixel) {
-    Vector3D toPoint = toSpace(pixel);
-    Vector3D fromDirection = toPoint.minus(eye).bangnormalize();
-    return new Ray(toPoint, fromDirection, 3);
+    Vector3D origin = toSpace(pixel);
+    return new Ray(Line.fromTwoPointsOriginOnSecond(eye, origin), 3);
   }
 
   public Vector3D toSpace(Vector2D pixel) {
-    return topLeftCorner.plusMultiplied(referential.i, pixel.x*pixelWidth).bangplusMultiplied(referential.j, pixel.y*pixelHeight);
+    return topLeftCorner
+    		.plus(referential.i.multiply(pixel.x * pixelWidth))
+    		.plus(referential.j.multiply(pixel.y * pixelHeight));
   }
 
 }

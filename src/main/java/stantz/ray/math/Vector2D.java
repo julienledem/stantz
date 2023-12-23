@@ -1,9 +1,9 @@
 package stantz.ray.math;
 
-public class Vector2D {
+public final class Vector2D {
 
-  public double x;
-  public double y;
+  public final double x;
+  public final double y;
 
   public Vector2D(double x, double y) {
     super();
@@ -19,22 +19,17 @@ public class Vector2D {
     return new Vector2D(x+v.x,y+v.y);
   }
 
-  public Vector2D bangMinPerCoordinate(Vector2D v) {
-    this.x = x < v.x ? x : v.x;
-    this.y = y < v.y ? y : v.y;
-    return this;
+  public Vector2D minPerCoordinate(Vector2D v) {
+    double minx = Math.min(x, v.x);
+    double miny = Math.min(y, v.y);
+    return new Vector2D(minx, miny);
   }
 
-  public Vector2D bangMaxPerCoordinate(Vector2D v) {
-    this.x = x > v.x ? x : v.x;
-    this.y = y > v.y ? y : v.y;
-    return this;
+  public Vector2D maxPerCoordinate(Vector2D v) {
+	double maxx = Math.max(x, v.x);
+	double maxy = Math.max(y, v.y);
+	return new Vector2D(maxx, maxy);
   }
 
-  public Vector2D bangupdate(double x, double y) {
-    this.x = x;
-    this.y = y;
-    return this;
-  }
 
 }
